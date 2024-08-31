@@ -87,18 +87,17 @@ def handle_message(event):
         matched_trigger = next(trigger for trigger in triggers if user_message.startswith(trigger))
         query = user_message[len(matched_trigger):].strip()
         
-        message_id = send_loading_animation(event.reply_token)
+        # 直接開始動畫，不發送初始 "處理中" 消息
+        message_id = start_loading_animation(event.reply_token)
         
         # 將任務添加到隊列
         task_queue.append((event.source.user_id, query, message_id))
-        
-        # 開始動畫
-        threading.Thread(target=animate_loading, args=(message_id,)).start()
     else:
         app.logger.info(f"Received non-AI message: {user_message}")
 
-def send_loading_animation(reply_token):
-    loading_message = TextMessage(text="處理中...")
+def start_loading_animation(reply_token):
+    # 發送第一幀動畫
+    loading_message = TextMessage(text="處理中 ⠋")
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
         response = line_bot_api.reply_message_with_http_info(
@@ -107,7 +106,12 @@ def send_loading_animation(reply_token):
                 messages=[loading_message]
             )
         )
-    return response[2]['x-line-message-id']
+    message_id = response[2]['x-line-message-id']
+    
+    # 啟動動畫線程
+    threading.Thread(target=animate_loading, args=(message_id,)).start()
+    
+    return message_id
 
 def animate_loading(message_id):
     animations = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
