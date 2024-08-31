@@ -25,6 +25,8 @@ perplexity_api_key = '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'
 # 任務隊列
 task_queue = deque()
 stop_event = threading.Event()
+task_thread = None
+is_first_request = True
 
 def process_tasks():
     app.logger.info("Task processing thread started")
@@ -43,10 +45,14 @@ def process_tasks():
         time.sleep(1)
     app.logger.info("Task processing thread stopped")
 
-@app.before_first_request
-def start_task_processing_thread():
-    app.logger.info("Starting task processing thread")
-    threading.Thread(target=process_tasks, daemon=True).start()
+@app.before_request
+def before_request():
+    global is_first_request, task_thread
+    if is_first_request:
+        app.logger.info("Starting task processing thread")
+        task_thread = threading.Thread(target=process_tasks, daemon=True)
+        task_thread.start()
+        is_first_request = False
 
 @app.route("/callback", methods=['POST'])
 def callback():
