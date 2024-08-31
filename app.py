@@ -1,7 +1,7 @@
 from flask import Flask, request, abort
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
-from linebot.v3.messaging import Configuration, ApiClient, MessagingApi, ReplyMessageRequest, TextMessage
+from linebot.v3.messaging import Configuration, ApiClient, MessagingApi, PushMessageRequest, TextMessage
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 import requests
 import logging
@@ -72,14 +72,13 @@ def get_perplexity_response(query):
     }
     try:
         app.logger.info(f"Sending request to Perplexity API: {json.dumps(data, ensure_ascii=False)}")
-        response = requests.post(url, json=data, headers=headers, timeout=60)
+        response = requests.post(url, json=data, headers=headers, timeout=120)
         response.raise_for_status()
         content = response.json()['choices'][0]['message']['content']
         app.logger.info(f"Received response from Perplexity API: {content}")
         return content[:3000]
     except requests.RequestException as e:
         app.logger.error(f"Error when calling Perplexity API: {e}")
-        app.logger.error(f"Response content: {response.text}")
         raise
 
 @handler.add(MessageEvent, message=TextMessageContent)
@@ -96,56 +95,15 @@ def handle_message(event):
     else:
         app.logger.info(f"Received non-AI message: {user_message}")
 
-def start_loading_animation(reply_token):
-    # 發送第一幀動畫
-    loading_message = TextMessage(text="處理中 ⠋")
+def send_message(user_id, message):
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
-        response = line_bot_api.reply_message(
-            ReplyMessageRequest(
-                reply_token=reply_token,
-                messages=[loading_message]
+        line_bot_api.push_message(
+            PushMessageRequest(
+                to=user_id,
+                messages=[TextMessage(text=message)]
             )
         )
-    
-    # 嘗試從響應中獲取 message_id
-    try:
-        message_id = response.message_id
-    except AttributeError:
-        app.logger.error("Failed to get message_id from response")
-        return None
-
-    if message_id:
-        # 啟動動畫線程
-        threading.Thread(target=animate_loading, args=(message_id,), daemon=True).start()
-    
-    return message_id
-
-def animate_loading(message_id):
-    animations = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-    start_time = time.time()
-    while time.time() - start_time < 60:  # 最多運行60秒
-        for frame in animations:
-            try:
-                update_message(message_id, f"處理中 {frame}")
-                time.sleep(0.5)  # 降低更新頻率，避免達到 API 限制
-            except Exception as e:
-                app.logger.error(f"Error updating loading animation: {e}")
-                return
-        if time.time() - start_time >= 60:
-            update_message(message_id, "歹勢歹勢，大神處理時間過長。請稍後再試！")
-            return
-
-def update_message(message_id, new_text):
-    with ApiClient(configuration) as api_client:
-        line_bot_api = MessagingApi(api_client)
-        try:
-            line_bot_api.update_message(
-                message_id,
-                TextMessage(text=new_text)
-            )
-        except Exception as e:
-            app.logger.error(f"Error updating message: {e}")
 
 if __name__ == "__main__":
     app.logger.info("Starting the application")
