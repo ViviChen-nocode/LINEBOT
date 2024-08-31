@@ -46,11 +46,16 @@ def callback():
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
     user_message = event.message.text
-    if user_message.startswith('問大神'):
-        query = user_message[3:].strip()  # 移除 "問大神" 並去除空白
+    triggers = ['問大神', '請問大神', '大神']
+    
+    if any(user_message.startswith(trigger) for trigger in triggers):
+        # 找到匹配的觸發詞
+        matched_trigger = next(trigger for trigger in triggers if user_message.startswith(trigger))
+        query = user_message[len(matched_trigger):].strip()  # 移除觸發詞並去除空白
         app.logger.info(f"Querying Perplexity AI with: {query}")
         ai_response = get_perplexity_response(query)
-        app.logger.info(f"Received response from Perplexity AI: {ai_response}")
+        
+        app.logger.info(f"Sending response to LINE: {ai_response}")
         with ApiClient(configuration) as api_client:
             line_bot_api = MessagingApi(api_client)
             line_bot_api.reply_message_with_http_info(
@@ -93,8 +98,12 @@ def get_perplexity_response(query):
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
     user_message = event.message.text
-    if user_message.startswith('問大神'):
-        query = user_message[3:].strip()
+    triggers = ['問大神', '請問大神', '大神']
+    
+    if any(user_message.startswith(trigger) for trigger in triggers):
+        # 找到匹配的觸發詞
+        matched_trigger = next(trigger for trigger in triggers if user_message.startswith(trigger))
+        query = user_message[len(matched_trigger):].strip()  # 移除觸發詞並去除空白
         app.logger.info(f"Querying Perplexity AI with: {query}")
         ai_response = get_perplexity_response(query)
         
