@@ -42,7 +42,8 @@ def process_tasks():
         time.sleep(1)
 
 # 啟動後台任務處理線程
-threading.Thread(target=process_tasks, daemon=True).start()
+task_thread = threading.Thread(target=process_tasks, daemon=True)
+task_thread.start()
 
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -79,6 +80,7 @@ def get_perplexity_response(query):
         return content[:3000]
     except requests.RequestException as e:
         app.logger.error(f"Error when calling Perplexity API: {e}")
+        app.logger.error(f"Response content: {response.text}")
         raise
 
 @handler.add(MessageEvent, message=TextMessageContent)
