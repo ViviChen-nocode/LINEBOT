@@ -87,11 +87,20 @@ def handle_message(event):
         matched_trigger = next(trigger for trigger in triggers if user_message.startswith(trigger))
         query = user_message[len(matched_trigger):].strip()
         
-        # 直接開始動畫，不發送初始 "處理中" 消息
         message_id = start_loading_animation(event.reply_token)
-        
-        # 將任務添加到隊列
-        task_queue.append((event.source.user_id, query, message_id))
+        if message_id:
+            # 將任務添加到隊列
+            task_queue.append((event.source.user_id, query, message_id))
+        else:
+            # 如果無法獲取 message_id，直接回覆錯誤消息
+            with ApiClient(configuration) as api_client:
+                line_bot_api = MessagingApi(api_client)
+                line_bot_api.reply_message(
+                    ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[TextMessage(text="抱歉，系統暫時無法處理您的請求。請稍後再試。")]
+                    )
+                )
     else:
         app.logger.info(f"Received non-AI message: {user_message}")
 
@@ -100,36 +109,51 @@ def start_loading_animation(reply_token):
     loading_message = TextMessage(text="處理中 ⠋")
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
-        response = line_bot_api.reply_message_with_http_info(
+        response = line_bot_api.reply_message(
             ReplyMessageRequest(
                 reply_token=reply_token,
                 messages=[loading_message]
             )
         )
-    message_id = response[2]['x-line-message-id']
     
-    # 啟動動畫線程
-    threading.Thread(target=animate_loading, args=(message_id,)).start()
+    # 嘗試從響應中獲取 message_id
+    try:
+        message_id = response.message_id
+    except AttributeError:
+        app.logger.error("Failed to get message_id from response")
+        return None
+
+    if message_id:
+        # 啟動動畫線程
+        threading.Thread(target=animate_loading, args=(message_id,), daemon=True).start()
     
     return message_id
 
 def animate_loading(message_id):
     animations = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-    for i in range(600):  # 最多循環 60 秒
-        try:
-            update_message(message_id, f"處理中 {animations[i % len(animations)]}")
-            time.sleep(0.1)
-        except Exception as e:
-            app.logger.error(f"Error updating loading animation: {e}")
-            break
+    start_time = time.time()
+    while time.time() - start_time < 60:  # 最多運行60秒
+        for frame in animations:
+            try:
+                update_message(message_id, f"處理中 {frame}")
+                time.sleep(0.5)  # 降低更新頻率，避免達到 API 限制
+            except Exception as e:
+                app.logger.error(f"Error updating loading animation: {e}")
+                return
+        if time.time() - start_time >= 60:
+            update_message(message_id, "歹勢歹勢，大神處理時間過長。請稍後再試！")
+            return
 
 def update_message(message_id, new_text):
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
-        line_bot_api.update_message(
-            message_id,
-            TextMessage(text=new_text)
-        )
+        try:
+            line_bot_api.update_message(
+                message_id,
+                TextMessage(text=new_text)
+            )
+        except Exception as e:
+            app.logger.error(f"Error updating message: {e}")
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5001))  # 默認使用 5001，但允許環境變量覆蓋
