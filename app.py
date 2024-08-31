@@ -73,10 +73,10 @@ def get_perplexity_response(query):
     data = {
         "model": "llama-3.1-sonar-small-128k-online",
         "messages": [
-            {"role": "system", "content": "You are a helpful assistant. Please provide concise and accurate answers."},
-            {"role": "user", "content": query}
+           {"role": "system", "content": "你是一個有幫助的助手。請用繁體中文回答，並從台灣的角度出發。假設用戶位於台灣，除非他們特別說明。對於天氣、當地新聞或活動等問題，預設回答台灣的情況。提供準確、簡潔但信息豐富的回答，盡量控制在3000字以內。"},
+           {"role": "user", "content": query}
         ],
-        "max_tokens": 150
+         "max_tokens": 800  # 調整為較小的值，大約對應3000字符
     }
     try:
         app.logger.info(f"Sending request to Perplexity API: {json.dumps(data, ensure_ascii=False)}")
@@ -84,13 +84,32 @@ def get_perplexity_response(query):
         response.raise_for_status()
         content = response.json()['choices'][0]['message']['content']
         app.logger.info(f"Received response from Perplexity API: {content}")
-        return content
+        return content[:3000]  # 確保回應不超過3000字符
     except requests.RequestException as e:
         app.logger.error(f"Error when calling Perplexity API: {e}")
         app.logger.error(f"Response content: {response.text}")
-        app.logger.error(f"Request headers: {headers}")
-        app.logger.error(f"Request data: {json.dumps(data, ensure_ascii=False)}")
         return "抱歉，大神現在有點忙。請稍後再問問看吧！"
+    
+@handler.add(MessageEvent, message=TextMessageContent)
+def handle_message(event):
+    user_message = event.message.text
+    if user_message.startswith('問大神'):
+        query = user_message[3:].strip()
+        app.logger.info(f"Querying Perplexity AI with: {query}")
+        ai_response = get_perplexity_response(query)
+        
+        app.logger.info(f"Sending response to LINE: {ai_response}")
+        with ApiClient(configuration) as api_client:
+            line_bot_api = MessagingApi(api_client)
+            line_bot_api.reply_message_with_http_info(
+                ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text=ai_response)]
+                )
+            )
+    else:
+        app.logger.info(f"Received non-AI message: {user_message}")
+    
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5001))  # 默認使用 5001，但允許環境變量覆蓋
