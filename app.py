@@ -56,9 +56,14 @@ def before_request():
 
 @app.route("/callback", methods=['POST'])
 def callback():
-    signature = request.headers['X-Line-Signature']
+    signature = request.headers.get('X-Line-Signature')
     body = request.get_data(as_text=True)
     app.logger.info("Request body: " + body)
+    
+    if not signature:
+        app.logger.warning("X-Line-Signature is missing")
+        return 'OK', 200
+    
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
@@ -115,6 +120,27 @@ def send_message(user_id, message):
                 messages=[TextMessage(text=message)]
             )
         )
+
+@app.route("/ping", methods=['GET', 'POST'])
+def ping():
+    app.logger.info("Received ping request")
+    return 'pong', 200
+
+@app.errorhandler(500)
+def internal_error(error):
+    app.logger.error('Server Error: %s', error)
+    return "500 Internal Server Error", 500
+
+@app.before_request
+def log_request_info():
+    app.logger.info('Headers: %s', request.headers)
+    app.logger.info('Body: %s', request.get_data())
+
+@app.after_request
+def log_response_info(response):
+    app.logger.info('Response Status: %s', response.status)
+    app.logger.info('Response: %s', response.get_data())
+    return response
 
 if __name__ == "__main__":
     app.logger.info("Starting the application")
