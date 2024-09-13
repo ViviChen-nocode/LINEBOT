@@ -5,7 +5,7 @@ from linebot.v3.messaging import Configuration, ApiClient, MessagingApi, PushMes
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 import requests
 import logging
-import os
+import os 
 import threading
 import time
 import json
