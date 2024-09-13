@@ -41,7 +41,7 @@ def process_tasks():
                 app.logger.info(f"Sent response to user {user_id}")
             except Exception as e:
                 app.logger.error(f"Error processing task: {e}")
-                send_message(user_id, "溫馨提醒：使用【問大神】請直接接續問題:))
+                send_message(user_id, "溫馨提醒：使用【問大神】請直接接續問題:)")
         time.sleep(1)
     app.logger.info("Task processing thread stopped")
 
